@@ -1,0 +1,153 @@
+## Version 1.0
+# Major Update : 기존에 제공하던 스키마가 "삭제" 되거나 "수정" 될 때 (프론트엔드 코드를 변경하지 않으면 문제가 생길 여지가 존재할 경우) -> Version의 앞 자리가 올라감
+# Minor Update : 기존에 제공하던 스키마에 다른 정보가 "추가" 될 때 (프론트엔드 코드를 변경하지 않아도 문제가 되지 않을 경우) -> Version의 소수점 자리가 올라감
+
+### --------------------- ###
+
+# =========================
+# Custom Directives
+# =========================
+
+directive @auth on FIELD_DEFINITION
+# @auth: AccessToken 헤더가 필요함을 나타내는 디렉티브
+
+# =========================
+# Query
+# =========================
+
+type Query {
+  # BusStop 관련
+  busStop(id: Int!): BusStop
+  # 버스정거장의 id를 입력하면 해당 버스정거장 정보를 가져옵니다.
+
+  searchBusStops(name: String, lat: Float, lng: Float, topK: Int!): [BusStop]
+  # 버스정거장 이름, 위도, 경도를 입력하면 topK 개수만큼 정거장 정보를 가져옵니다.
+  # 버스정거장 이름 또는 (위도, 경도) 중 하나 이상 반드시 입력해야 합니다.
+
+  # BusRoute 관련
+  busRoute(id: Int!): BusRoute
+  # 버스 노선의 id를 입력하면 해당 버스 노선 정보를 가져옵니다.
+
+  searchBusRoutes(routeNumber: String!, lat: Float, lng: Float): [BusRoute]
+  # 버스 노선 번호, 위도, 경도를 입력하면 관련 버스 노선 정보를 가져옵니다.
+
+  # User 관련 (로그인 필요)
+  user: User @auth
+  # AccessToken Header 필요
+}
+
+# =========================
+# Mutation
+# =========================
+
+type Mutation {
+  # Auth 관련
+
+  login(provider: String!, socialToken: String!): AuthPayload
+  # 소셜 로그인 (provider와 socialToken 필수)
+
+  deleteUser: Boolean @auth
+  # AccessToken Header 필요
+
+  logout: Boolean @auth
+  # AccessToken Header 필요
+
+  refreshAccessToken: AuthPayload
+  # Body에 refreshToken 포함
+
+  # User - Category, Bookmark 관련
+  setCategoryName(color: String!, name: String): Boolean @auth
+  addBusStop(color: String!, busStopId: Int!): Boolean @auth
+  addBusRoute(color: String!, busStopId: Int!, busRouteId: Int!): Boolean @auth
+  reorderCategoryBusStop(color: String!, reorderSequence: [Int!]): Boolean @auth # 만약 0번 1번 2번 3번 을 1번 0번 2번 3번으로 변경하고자 한다면  [1, 0, 2, 3]을 reorderSequence로 전달)
+  # User - Config 수정
+  updateUserConfig(input: UpdateUserConfigInput!): UserConfig @auth #변경하고자 하는 속성만 포함하여 전달
+}
+
+# =========================
+# Types
+# =========================
+
+# BusStop 관련 타입
+type BusStop {
+  id: Int!
+  name: String!
+  lat: Float!
+  lng: Float!
+  arrivals: [BusArrivalInfo!]
+  stopBusRoutes: [BusRoute!]
+}
+
+type BusArrivalInfo {
+  busRoute: BusRoute!
+  nextBusStopName: String! # 다음 정거장 이름 제공 - 어디 방향인지 나타낼 수 있음
+  firstEstimatedArrivalTime: Int! # 초 단위로 제공
+  secondEstimatedArrivalTime: Int! # 초 단위로 제공
+  firstRemainingStops: Int! # 3: 3번째 전, 0: AI 예측, -1: 정보 없음
+  secondRemainingStops: Int!
+  firstCongestionLevel: Int # 1: 여유, 2: 보통, 3: 혼잡 -1: 정보 없음
+  secondCongestionLevel: Int
+  firstRemainingSeats: Int # -1: 정보없음
+  secondRemainingSeats: Int
+}
+
+# BusRoute 관련 타입
+type BusRoute {
+  id: Int!
+  routeName: String!
+  type: Int! # 1: 일반버스, 2: 지선버스, 3: 간선버스, 4: 순환버스, 5: 마을버스, 6: 순환버스, 7: 급행버스, 8: 농어촌버스
+  busStopStates: [BusStopState!] # 정거장 상태 목록
+}
+
+type BusStopState {
+  stop: BusStop!
+  state: Int! # 0: 버스 없음, 1: 여유, 2: 보통, 3: 혼잡, 4: 혼잡도 정보 없음
+  firstCarTime: String! #7:46
+  lastCarTime: String! #23:13
+  carNumber: Int! #8771 - 버스 차량 번호, 차량이 현 위치에 없으면 0
+}
+
+# Auth & User 관련 타입
+type AuthPayload {
+  accessToken: String!
+  refreshToken: String!
+  user: User!
+}
+
+type User {
+  id: String!
+  username: String
+  email: String
+  profilePicture: String
+  provider: String! # 소셜 로그인 공급자 (예: "kakao", "google", "facebook")
+  userConfig: UserConfig!
+  userBookmarks: [Bookmark]
+}
+
+type Category {
+  name: String
+  color: String!
+  bookmark: [Bookmark]
+}
+
+type Bookmark {
+  id: Int!
+  pairs: [BusStopBusPair]
+}
+
+type BusStopBusPair {
+  busStop: BusStop!
+  buses: [BusRoute!]
+}
+
+type UserConfig {
+  fontSize: Int! # 1: small, 2: medium, 3: large
+}
+
+# =========================
+# Input Types
+# =========================
+
+input UpdateUserConfigInput {
+  fontSize: Int
+}
